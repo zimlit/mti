@@ -18,7 +18,32 @@
 
 #include "common.h"
 
-typedef double Value;
+typedef enum {
+  ValBool,
+  ValNil,
+  ValNum,
+} ValueType;
+
+
+typedef struct {
+  ValueType type;
+  union {
+    bool boolean;
+    double number;
+  } as; 
+} Value;
+
+
+#define IS_BOOL(value)    ((value).type == ValBool)
+#define IS_NIL(value)     ((value).type == ValNil)
+#define IS_NUMBER(value)  ((value).type == ValNum)
+
+#define BOOL_VAL(value)   ((Value){ValBool, {.boolean = value}})
+#define NIL_VAL           ((Value){ValNil, {.number = 0}})
+#define NUMBER_VAL(value) ((Value){ValNum, {.number = value}})
+
+#define AS_BOOL(value)    ((value).as.boolean)
+#define AS_NUMBER(value)  ((value).as.number)
 
 typedef struct {
   int capacity;
@@ -26,6 +51,7 @@ typedef struct {
   Value* values;
 } ValueArray;
 
+bool valuesEqual(Value a, Value b);
 void initValueArray(ValueArray* array);
 void writeValueArray(ValueArray* array, Value value);
 void freeValueArray(ValueArray* array);

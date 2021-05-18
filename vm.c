@@ -14,6 +14,7 @@
    */
 
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "common.h"
 #include "vm.h"
@@ -24,6 +25,19 @@ VM vm;
 
 static void resetStack() {
   vm.stackTop = vm.stack;
+}
+
+static void runtimeError(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+
+  size_t instruction = vm.ip - vm.chunk->code - 1;
+  int line = vm.chunk->lines[instruction];
+  fprintf(stderr, "[line %d] in script\n", line);
+  resetStack();
 }
 
 void initVM() {
@@ -43,14 +57,26 @@ Value pop() {
   return *vm.stackTop;
 }
 
+static Value peek(int distance) {
+  return vm.stackTop[-1 - distance];
+}
+
+static bool isFalsey(Value value) {
+  return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+}
+
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
-#define BINARY_OP(op) \
+#define BINARY_OP(valueType, op) \
     do { \
-      double b = pop(); \
-      double a = pop(); \
-      push(a op b); \
+      if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
+        runtimeError("Operands must be numbers."); \
+        return INTERPRET_RUNTIME_ERROR; \
+      } \
+      double b = AS_NUMBER(pop()); \
+      double a = AS_NUMBER(pop()); \
+      push(valueType(a op b)); \
     } while (false)
 
   for (;;) {
@@ -79,12 +105,31 @@ static InterpretResult run() {
         printf("\n");
         break;
       }
-      case OpNegate: push(-pop()); break;
-      case OpAdd: BINARY_OP(+); break;
-      case OpSubtract: BINARY_OP(-); break;
-      case OpMultiply: BINARY_OP(*); break;
-      case OpDivide: BINARY_OP(/); break;
-
+      case OpNegate:
+        if (!IS_NUMBER(peek(0))) {
+          runtimeError("Operand must be a number.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        push(NUMBER_VAL(-AS_NUMBER(pop())));
+        break;
+      case OpAdd: BINARY_OP(NUMBER_VAL, +); break;
+      case OpSubtract: BINARY_OP(NUMBER_VAL, -); break;
+      case OpMultiply: BINARY_OP(NUMBER_VAL, *); break;
+      case OpDivide: BINARY_OP(NUMBER_VAL, /); break;
+      case OpNil: push(NIL_VAL); break;
+      case OpTrue: push(BOOL_VAL(true)); break;
+      case OpFalse: push(BOOL_VAL(false)); break;
+      case OpNot:
+        push(BOOL_VAL(isFalsey(pop())));
+        break;
+      case OpEq: {
+        Value b = pop();
+        Value a = pop();
+        push(BOOL_VAL(valuesEqual(a, b)));
+        break;
+      }
+      case OpGreater:  BINARY_OP(BOOL_VAL, >); break;
+      case OpLess:     BINARY_OP(BOOL_VAL, <); break;
     }
   }
 
@@ -94,7 +139,18 @@ static InterpretResult run() {
 }
 
 InterpretResult interpret(const char* source) {
-  compile(source);
-  return INTERPRET_OK;
+  Chunk chunk;
+  initChunk(&chunk);
 
-}
+  if (!compile(source, &chunk)) {
+    freeChunk(&chunk);
+    return INTERPRET_COMPILE_ERROR;
+  }
+
+  vm.chunk = &chunk;
+  vm.ip = vm.chunk->code;
+
+  InterpretResult result = run();
+
+  freeChunk(&chunk);
+  return result;}

@@ -27,6 +27,13 @@ typedef enum {
   OpSubtract,
   OpMultiply,
   OpDivide,
+  OpNil,
+  OpFalse,
+  OpTrue,
+  OpNot,
+  OpEq,
+  OpGreater,
+  OpLess,
 } OpCode;
 
 typedef struct {

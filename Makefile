@@ -22,7 +22,7 @@ value.o: value.c value.h common.h
 vm.o: vm.c vm.h chunk.h debug.h value.h
 	cc $(CFLAGS) -c vm.c
 
-compiler.o: compiler.c compiler.h common.h scanner.h
+compiler.o: compiler.c compiler.h common.h scanner.h vm.h
 	cc $(CFLAGS) -c compiler.c
 
 scanner.o: scanner.c scanner.h common.h
