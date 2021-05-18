@@ -19,6 +19,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "scanner.h"
+#include "object.h"
 
 
 #ifdef DEBUG_PRINT_CODE
@@ -186,6 +187,11 @@ static void number() {
   emitConstant(NUMBER_VAL(value));
 }
 
+static void string() {
+  emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
+                                  parser.previous.length - 2)));
+}
+
 static void unary() {
   TokenType operatorType = parser.previous.type;
 
@@ -220,7 +226,7 @@ ParseRule rules[] = {
   [TokLess]         = {NULL,     binary, PrecComparison},
   [TokLessEq]       = {NULL,     binary, PrecComparison},
   [TokIdent]        = {NULL,     NULL,   PrecNone},
-  [TokString]       = {NULL,     NULL,   PrecNone},
+  [TokString]       = {string,     NULL,   PrecNone},
   [TokNumber]       = {number,   NULL,   PrecNone},
   [TokAnd]          = {NULL,     NULL,   PrecNone},
   [TokClass]        = {NULL,     NULL,   PrecNone},

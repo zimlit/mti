@@ -13,39 +13,43 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
    */
 
-#ifndef mti_vm_h
-#define mti_vm_h
+#ifndef mti_object_h
+#define mti_object_h
 
-#include "chunk.h"
+#include "common.h"
 #include "value.h"
-#include "table.h"
 
-#define STACK_MAX 1024
+#define OBJ_TYPE(value)        (AS_OBJ(value)->type)
 
-typedef struct {
-  Chunk* chunk;
-  uint8_t* ip;
-  Value stack[STACK_MAX];
-  Value* stackTop;
-  Table strings;
+#define IS_STRING(value)       isObjType(value, ObjTypeString)
 
-  Obj* objects;
-} VM;
+#define AS_STRING(value)       ((ObjString*)AS_OBJ(value))
+#define AS_CSTRING(value)      (((ObjString*)AS_OBJ(value))->chars)
 
 typedef enum {
-  INTERPRET_OK,
-  INTERPRET_COMPILE_ERROR,
-  INTERPRET_RUNTIME_ERROR
-} InterpretResult;
+  ObjTypeString,
+} ObjType;
 
-extern VM vm;
 
-void initVM();
-void freeVM();
-InterpretResult interpret(const char* source);
-void push(Value value);
-Value pop();
+struct Obj {
+  ObjType type;
+  struct Obj* next;
+};
+
+struct ObjString {
+  Obj obj;
+  int length;
+  char* chars;
+  uint32_t hash;
+};
+
+static inline bool isObjType(Value value, ObjType type) {
+  return IS_OBJ(value) && AS_OBJ(value)->type == type;
+}
+
+ObjString* copyString(const char* chars, int length);
+ObjString* takeString(char* chars, int length);
+
+void printObject(Value value);
 
 #endif
-
-
