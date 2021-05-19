@@ -43,6 +43,8 @@ typedef enum {
   OpPop,
   OpLocalPop,
   OpCopyValToLocal,
+  OpJumpIfFalse,
+  OpJump,
 } OpCode;
 
 typedef struct {

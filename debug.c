@@ -32,6 +32,15 @@ static int byteInstruction(const char* name, Chunk* chunk,
   return offset + 2; 
 }
 
+static int jumpInstruction(const char* name, int sign,
+                           Chunk* chunk, int offset) {
+  uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
+  jump |= chunk->code[offset + 2];
+  printf("%-16s %4d -> %d\n", name, offset,
+         offset + 3 + sign * jump);
+  return offset + 3;
+}
+
 int disassembleInstruction(Chunk* chunk, int offset) {
   printf("%04d ", offset);
   if (offset > 0 &&
@@ -80,10 +89,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
       return constantInstruction("OpGetGlobal", chunk, offset);
     case OpSetGlobal:
       return constantInstruction("OpSetGlobal", chunk, offset);
-      return simpleInstruction("OP_POP", offset);
+      return simpleInstruction("OpPOP", offset);
 
     case OpGetLocal:
-      return byteInstruction("OP_GET_LOCAL", chunk, offset);
+      return byteInstruction("OpGET_LOCAL", chunk, offset);
     
     case OpPop:
       return simpleInstruction("OpPop", offset);
@@ -91,6 +100,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
       return simpleInstruction("OpLocalPop", offset);
     case OpCopyValToLocal:
       return simpleInstruction("OpCopyValToLocal", offset);
+    case OpJump:
+      return jumpInstruction("OpJump", 1, chunk, offset);
+    case OpJumpIfFalse:
+      return jumpInstruction("OpJumpIfFalse", 1, chunk, offset);
     default:
       printf("Unknown opcode %d\n", instruction);
       return offset + 1;

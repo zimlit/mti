@@ -151,6 +151,13 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
   emitByte(byte2);
 }
 
+static int emitJump(uint8_t instruction) {
+  emitByte(instruction);
+  emitByte(0xff);
+  emitByte(0xff);
+  return currentChunk()->count - 2;
+}
+
 static void emitReturn() {
   emitByte(OpReturn);
 }
@@ -167,6 +174,18 @@ static uint8_t makeConstant(Value value) {
 
 static void emitConstant(Value value) {
   emitBytes(OpConstant, makeConstant(value));
+}
+
+static void patchJump(int offset) {
+  // -2 to adjust for the bytecode for the jump offset itself.
+  int jump = currentChunk()->count - offset - 2;
+
+  if (jump > UINT16_MAX) {
+    error("Too much code to jump over.");
+  }
+
+  currentChunk()->code[offset] = (jump >> 8) & 0xff;
+  currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
 static void endCompiler() {
@@ -385,6 +404,39 @@ static void block(bool canAssign) {
   endScope();
 }
 
+static void ifStmt(bool canAssign) {
+  consume(TokLeftParen, "Expect '(' after if");
+  expression();
+  consume(TokRightParen, "Expect ')' after condition");
+
+  int thenJump = emitJump(OpJumpIfFalse);
+  emitByte(OpPop);
+  bool isElse;
+  while (!check(TokEnd) && !check(TokEOF)) {
+    expression();
+    if (match(TokElse)) {
+        isElse = true;
+        break;
+    }
+  }
+
+  int elseJump = emitJump(OpJump);
+
+  patchJump(thenJump);
+
+  emitByte(OpPop);
+  if (!isElse) {
+    emitByte(OpNil);
+  }
+  while (!check(TokEnd) && !check(TokEOF)) {
+    expression();
+  }
+
+  patchJump(elseJump);
+
+  consume(TokEnd, "expect 'end' after if expression");
+}
+
 ParseRule rules[] = {
   [TokLeftParen]    = {grouping, NULL,   PrecNone},
   [TokRightParen]   = {NULL,     NULL,   PrecNone},
@@ -413,7 +465,7 @@ ParseRule rules[] = {
   [TokElse]         = {NULL,     NULL,   PrecNone},
   [TokFalse]        = {literal,  NULL,   PrecNone},
   [TokFn]           = {NULL,     NULL,   PrecNone},
-  [TokIf]           = {NULL,     NULL,   PrecNone},
+  [TokIf]           = {ifStmt,   NULL,   PrecStatement},
   [TokNil]          = {literal,  NULL,   PrecNone},
   [TokOr]           = {NULL,     NULL,   PrecNone},
   [TokPrint]        = {print,    NULL,  PrecStatement},
