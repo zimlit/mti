@@ -31,7 +31,7 @@ typedef enum {
   TokAnd, TokClass, TokElse, TokFalse,
   TokWhile, TokFn, TokIf, TokNil, TokOr,
   TokPrint, TokReturn, TokSuper, TokSelf,
-  TokTrue, TokLet, TokEnd,
+  TokTrue, TokLet, TokEnd, TokDo,
 
   TokError, TokEOF
 } TokenType;

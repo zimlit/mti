@@ -26,7 +26,10 @@ typedef struct {
   Chunk* chunk;
   uint8_t* ip;
   Value stack[STACK_MAX];
+  Value localStack[STACK_MAX];
   Value* stackTop;
+  Value* localStackTop;
+  Table globals;
   Table strings;
 
   Obj* objects;
@@ -45,6 +48,8 @@ void freeVM();
 InterpretResult interpret(const char* source);
 void push(Value value);
 Value pop();
+Value localPop();
+void localPush(Value value);
 
 #endif
 

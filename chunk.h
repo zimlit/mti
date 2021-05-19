@@ -34,6 +34,15 @@ typedef enum {
   OpEq,
   OpGreater,
   OpLess,
+  OpPrint,
+  OpDefineGlobal,
+  OpGetGlobal,
+  OpSetGlobal,
+  OpGetLocal,
+  OpSetLocal,
+  OpPop,
+  OpLocalPop,
+  OpCopyValToLocal,
 } OpCode;
 
 typedef struct {

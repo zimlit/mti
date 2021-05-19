@@ -159,6 +159,7 @@ static TokenType identifierType() {
     case 'i': return checkKeyword(1, 1, "f", TokIf);
     case 'n': return checkKeyword(1, 2, "il", TokNil);
     case 'o': return checkKeyword(1, 1, "r", TokOr);
+    case 'd': return checkKeyword(1, 1, "o", TokDo);
     case 'p': return checkKeyword(1, 4, "rint", TokPrint);
     case 'r': return checkKeyword(1, 5, "eturn", TokReturn);
     case 't': return checkKeyword(1, 3, "rue", TokTrue);

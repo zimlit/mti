@@ -28,6 +28,7 @@ VM vm;
 
 static void resetStack() {
   vm.stackTop = vm.stack;
+  vm.localStackTop = vm.localStack;
 }
 
 static void runtimeError(const char* format, ...) {
@@ -46,10 +47,12 @@ static void runtimeError(const char* format, ...) {
 void initVM() {
   resetStack();
   vm.objects = NULL;
+  initTable(&vm.globals);
   initTable(&vm.strings);
 }
 
 void freeVM() {
+  freeTable(&vm.globals);
   freeTable(&vm.strings);
   freeObjects();
 }
@@ -62,6 +65,17 @@ void push(Value value) {
 Value pop() {
   vm.stackTop--;
   return *vm.stackTop;
+}
+
+
+void localPush(Value value) {
+  *vm.localStackTop = value;
+  vm.localStackTop++;
+}
+
+Value localPop() {
+  vm.localStackTop--;
+  return *vm.localStackTop;
 }
 
 static Value peek(int distance) {
@@ -89,6 +103,7 @@ static void concatenate() {
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_STRING() AS_STRING(READ_CONSTANT())
 #define BINARY_OP(valueType, op) \
     do { \
       if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
@@ -109,21 +124,24 @@ static InterpretResult run() {
       printf(" ]");
     }
     printf("\n");
+    printf("          ");
+    for (Value* slot = vm.localStack; slot < vm.localStackTop; slot++) {
+      printf("[ ");
+      printValue(*slot);
+      printf(" ]");
+    }
+    printf("\n");
     disassembleInstruction(vm.chunk,
                            (int)(vm.ip - vm.chunk->code));
 #endif
     uint8_t instruction;
     switch (instruction = READ_BYTE()) {
       case OpReturn: {
-        printValue(pop());
-        printf("\n");
         return INTERPRET_OK;
       }
       case OpConstant: {
         Value constant = READ_CONSTANT();
         push(constant);
-        printValue(constant);
-        printf("\n");
         break;
       }
       case OpNegate:
@@ -164,17 +182,62 @@ static InterpretResult run() {
       }
       case OpGreater:  BINARY_OP(BOOL_VAL, >); break;
       case OpLess:     BINARY_OP(BOOL_VAL, <); break;
+      case OpPrint: {
+        printValue(pop());
+        printf("\n");
+        push(NIL_VAL);
+        break;
+      }
+      case OpDefineGlobal: {
+        ObjString* name = READ_STRING();
+        tableSet(&vm.globals, name, peek(0));
+        break;
+      }
+      case OpGetGlobal: {
+        ObjString* name = READ_STRING();
+        Value value;
+        if (!tableGet(&vm.globals, name, &value)) {
+          runtimeError("Undefined variable '%s'.", name->chars);
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        push(value);
+        break;
+      }
+      case OpSetGlobal: {
+        ObjString* name = READ_STRING();
+        if (tableSet(&vm.globals, name, peek(0))) {
+          tableDelete(&vm.globals, name); 
+          runtimeError("Undefined variable '%s'.", name->chars);
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        break;
+      }
+      case OpGetLocal: {
+        uint8_t slot = READ_BYTE();
+        push(vm.localStack[slot]); 
+        break;
+      }
+      case OpPop: pop(); break;
+      case OpLocalPop: localPop(); break;
+      case OpCopyValToLocal: {
+        Value v = pop();
+        push(v);
+        localPush(v);
+      }
+      break;
     }
   }
 
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_STRING
 #undef BINARY_OP
 }
 
 InterpretResult interpret(const char* source) {
   Chunk chunk;
   initChunk(&chunk);
+  resetStack();
 
   if (!compile(source, &chunk)) {
     freeChunk(&chunk);

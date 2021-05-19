@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra #-Werror
+CFLAGS = -g -Wall -Wextra #-Werror
 
 mti: main.o chunk.o memory.o debug.o value.o vm.o compiler.o scanner.o object.o table.o
 	cc $(CFLAGS) -o mti main.o chunk.o memory.o debug.o \
