@@ -35,9 +35,10 @@ typedef struct {
 } Parser;
 
 typedef enum {
+  PrecNone,
   PrecDeclaration,
   PrecStatement,
-  PrecNone,
+  PrecLiteral,
   PrecAssignment,
   PrecOr,
   PrecAnd,
@@ -404,8 +405,8 @@ ParseRule rules[] = {
   [TokGreaterEq]    = {NULL,     binary, PrecComparison},
   [TokLess]         = {NULL,     binary, PrecComparison},
   [TokLessEq]       = {NULL,     binary, PrecComparison},
-  [TokIdent]        = {variable, NULL,   PrecNone},
-  [TokString]       = {string,   NULL,   PrecNone},
+  [TokIdent]        = {variable, NULL,   PrecLiteral},
+  [TokString]       = {string,   NULL,   PrecLiteral},
   [TokNumber]       = {number,   NULL,   PrecNone},
   [TokAnd]          = {NULL,     NULL,   PrecNone},
   [TokClass]        = {NULL,     NULL,   PrecNone},
