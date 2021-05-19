@@ -35,9 +35,9 @@ typedef struct {
 } Parser;
 
 typedef enum {
-  PrecNone,
   PrecDeclaration,
   PrecStatement,
+  PrecNone,
   PrecAssignment,
   PrecOr,
   PrecAnd,
@@ -294,7 +294,7 @@ static void unary(bool canAssign) {
 }
 
 static void print(bool canAssign) {
-  parsePrecedence(PrecStatement);
+  expression();
   emitByte(OpPrint);
 }
 
@@ -415,7 +415,7 @@ ParseRule rules[] = {
   [TokIf]           = {NULL,     NULL,   PrecNone},
   [TokNil]          = {literal,  NULL,   PrecNone},
   [TokOr]           = {NULL,     NULL,   PrecNone},
-  [TokPrint]        = {print,    NULL,   PrecStatement},
+  [TokPrint]        = {print,    NULL,  PrecStatement},
   [TokReturn]       = {NULL,     NULL,   PrecNone},
   [TokSuper]        = {NULL,     NULL,   PrecNone},
   [TokSelf]         = {NULL,     NULL,   PrecNone},
@@ -477,7 +477,7 @@ static void synchronize() {
 
 
 static void expression() {
-  parsePrecedence(PrecDeclaration);
+  parsePrecedence(PrecAssignment);
   if (parser.panicMode) synchronize();
 }
 
