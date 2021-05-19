@@ -1,4 +1,1 @@
-do
-  let a =4
-  print a
-end
+print "hello world"

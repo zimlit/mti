@@ -58,7 +58,16 @@ typedef struct {
   int depth;
 } Local;
 
-typedef struct {
+typedef enum {
+  TypeFunction,
+  TypeScript
+} FunctionType;
+
+typedef struct Compiler {
+  struct Compiler* enclosing;
+  ObjFunction* function;
+  FunctionType type;
+
   Local locals[UINT8_COUNT];
   int localCount;
   int scopeDepth;
@@ -73,17 +82,32 @@ typedef struct {
 } ParseRule;
 
 Parser parser;
-Chunk* compilingChunk;
 Compiler* current = NULL;
 
-static void initCompiler(Compiler* compiler) {
+static void initCompiler(Compiler* compiler, FunctionType type) {
+  compiler->enclosing = current;
+  compiler->function = NULL;
+  compiler->type = type;
   compiler->localCount = 0;
   compiler->scopeDepth = 0;
+  compiler->function = newFunction();
   current = compiler;
+
+
+  if (type != TypeScript) {
+    current->function->name = copyString(parser.previous.start,
+                                         parser.previous.length);
+  }
+
+
+  Local* local = &current->locals[current->localCount++];
+  local->depth = 0;
+  local->name.start = "";
+  local->name.length = 0;
 }
 
 static Chunk* currentChunk() {
-  return compilingChunk;
+  return &current->function->chunk;
 }
 
 static void errorAt(Token* token, const char* message) {
@@ -151,6 +175,16 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
   emitByte(byte2);
 }
 
+static void emitLoop(int loopStart) {
+  emitByte(OpLoop);
+
+  int offset = currentChunk()->count - loopStart + 2;
+  if (offset > UINT16_MAX) error("Loop body too large.");
+
+  emitByte((offset >> 8) & 0xff);
+  emitByte(offset & 0xff);
+}
+
 static int emitJump(uint8_t instruction) {
   emitByte(instruction);
   emitByte(0xff);
@@ -188,13 +222,17 @@ static void patchJump(int offset) {
   currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
-static void endCompiler() {
+static ObjFunction* endCompiler() {
   emitReturn();
+
+  ObjFunction* function = current->function;
 #ifdef DEBUG_PRINT_CODE
   if (!parser.hadError) {
-    disassembleChunk(currentChunk(), "code");
-  }
+      disassembleChunk(currentChunk(), function->name != NULL
+        ? function->name->chars : "<script>");}
 #endif
+  current = current->enclosing;
+  return function;
 }
 
 
@@ -329,6 +367,7 @@ static uint8_t parseVariable(const char* errorMessage) {
 }
 
 static void markInitialized() {
+  if (current->scopeDepth == 0) return;
   current->locals[current->localCount - 1].depth =
       current->scopeDepth;
 }
@@ -425,7 +464,7 @@ static void block(bool canAssign) {
 }
 
 static void ifStmt(bool canAssign) {
-  consume(TokLeftParen, "Expect '(' after if");
+  consume(TokLeftParen, "Expect '(' after 'if'");
   expression();
   consume(TokRightParen, "Expect ')' after condition");
 
@@ -454,11 +493,105 @@ static void ifStmt(bool canAssign) {
 
   patchJump(elseJump);
 
-  consume(TokEnd, "expect 'end' after if expression");
+  consume(TokEnd, "expect 'end' after if");
+}
+
+static void whileStmt(bool canAssign) {
+  int loopStart = currentChunk()->count;
+
+  consume(TokLeftParen, "Expect '(' after 'while'");
+  expression();
+  consume(TokRightParen, "Expect ')' after condition");
+
+  int exitJump = emitJump(OpJumpIfFalse);
+
+  emitByte(OpPop);
+  while (!check(TokEnd) && !check(TokEOF)) {
+    expression();
+  }
+
+  emitLoop(loopStart);
+
+  patchJump(exitJump);
+
+  emitByte(OpPop);
+  emitByte(OpNil);
+
+  consume(TokEnd, "expect 'end' after while");
+}
+
+static void function(FunctionType type) {
+  Compiler compiler;
+  initCompiler(&compiler, type);
+  beginScope(); 
+
+  consume(TokLeftParen, "Expect '(' after function name.");
+  if (!check(TokRightParen)) {
+    do {
+      current->function->arity++;
+      if (current->function->arity > 255) {
+        errorAtCurrent("Can't have more than 255 parameters.");
+      }
+
+      uint8_t constant = parseVariable("Expect parameter name.");
+      defineVariable(constant);
+    } while (match(TokComma));
+  }
+  consume(TokRightParen, "Expect ')' after parameters.");
+
+
+  while (!check(TokEnd) && !check(TokEOF)) {
+    expression();
+  }
+  
+  consume(TokEnd, "Expect 'end' after function");
+  
+  endScope();
+  ObjFunction* function = endCompiler();
+  emitBytes(OpConstant, makeConstant(OBJ_VAL(function)));
+}
+
+static void fn(bool canAssign) {
+  uint8_t global = parseVariable("Expect function name.");
+  markInitialized();
+  function(TypeFunction);
+  defineVariable(global);
+}
+
+static uint8_t argumentList() {
+  uint8_t argCount = 0;
+  if (!check(TokRightParen)) {
+    do {
+      expression();
+
+
+      if (argCount == 255) {
+        error("Can't have more than 255 arguments.");
+      }
+      argCount++;
+    } while (match(TokComma));
+  }
+
+  consume(TokRightParen, "Expect ')' after arguments.");
+  return argCount;
+}
+
+static void call(bool canAssign) {
+  uint8_t argCount = argumentList();
+  emitBytes(OpCall, argCount);
+}
+
+static void ret(bool canAssign) {
+  if (current->type == TypeScript) {
+    error("Can't return from top-level code.");
+  }
+
+  expression();
+  emitReturn();
 }
 
 ParseRule rules[] = {
-  [TokLeftParen]    = {grouping, NULL,   PrecNone},
+  [TokLeftParen]    = {grouping, call,   PrecCall},
   [TokRightParen]   = {NULL,     NULL,   PrecNone},
   [TokEnd]          = {NULL,     NULL,   PrecNone},
   [TokDo]           = {block,    NULL,   PrecStatement},
@@ -484,17 +617,17 @@ ParseRule rules[] = {
   [TokClass]        = {NULL,     NULL,   PrecNone},
   [TokElse]         = {NULL,     NULL,   PrecNone},
   [TokFalse]        = {literal,  NULL,   PrecNone},
-  [TokFn]           = {NULL,     NULL,   PrecNone},
+  [TokFn]           = {fn,       NULL,   PrecDeclaration},
   [TokIf]           = {ifStmt,   NULL,   PrecStatement},
   [TokNil]          = {literal,  NULL,   PrecNone},
   [TokOr]           = {NULL,     or_,    PrecOr},
   [TokPrint]        = {print,    NULL,   PrecStatement},
-  [TokReturn]       = {NULL,     NULL,   PrecNone},
+  [TokReturn]       = {ret,      NULL,   PrecStatement},
   [TokSuper]        = {NULL,     NULL,   PrecNone},
   [TokSelf]         = {NULL,     NULL,   PrecNone},
   [TokTrue]         = {literal,  NULL,   PrecNone},
   [TokLet]          = {vardecl,  vardecl,PrecDeclaration},
-  [TokWhile]        = {NULL,     NULL,   PrecNone},
+  [TokWhile]        = {whileStmt,NULL,   PrecStatement},
   [TokError]        = {NULL,     NULL,   PrecNone},
   [TokEOF]          = {NULL,     NULL,   PrecNone},
 };
@@ -554,11 +687,10 @@ static void expression() {
   if (parser.panicMode) synchronize();
 }
 
-bool compile(const char* source, Chunk* chunk) {
+ObjFunction* compile(const char* source) {
   initScanner(source);
   Compiler compiler;
-  initCompiler(&compiler);
-  compilingChunk = chunk;
+  initCompiler(&compiler, TypeScript);
 
   parser.hadError = false;
   parser.panicMode = false;
@@ -567,6 +699,6 @@ bool compile(const char* source, Chunk* chunk) {
   while (!match(TokEOF)) {
     expression();
   }
-  endCompiler();
-  return !parser.hadError;
+  ObjFunction* function = endCompiler();
+  return parser.hadError ? NULL : function;
 }

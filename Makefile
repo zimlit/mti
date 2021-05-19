@@ -28,7 +28,7 @@ compiler.o: compiler.c compiler.h common.h scanner.h vm.h object.h
 scanner.o: scanner.c scanner.h common.h
 	cc $(CFLAGS) -c scanner.c
 
-object.o: object.c object.h common.h value.h memory.h vm.h table.h
+object.o: object.c object.h common.h value.h memory.h vm.h table.h chunk.h
 	cc $(CFLAGS) -c object.c
 
 table.o: table.c table.h common.h value.h object.h memory.h

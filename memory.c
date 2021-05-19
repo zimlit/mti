@@ -37,6 +37,12 @@ static void freeObject(Obj* object) {
       FREE(ObjString, object);
       break;
     }
+    case ObjTypeFunction: {
+      ObjFunction* function = (ObjFunction*)object;
+      freeChunk(&function->chunk);
+      FREE(ObjFunction, object);
+      break;
+    }
   }
 }
 
