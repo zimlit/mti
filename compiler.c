@@ -344,6 +344,26 @@ static void defineVariable(uint8_t global) {
   emitBytes(OpDefineGlobal, global);
 }
 
+static void and_(bool canAssign) {
+  int endJump = emitJump(OpJumpIfFalse);
+
+  emitByte(OpPop);
+  parsePrecedence(PrecAnd);
+
+  patchJump(endJump);
+}
+
+static void or_(bool canAssign) {
+  int elseJump = emitJump(OpJumpIfFalse);
+  int endJump = emitJump(OpJump);
+
+  patchJump(elseJump);
+  emitByte(OpPop);
+
+  parsePrecedence(PrecOr);
+  patchJump(endJump);
+}
+
 static void vardecl(bool canAssign) {
   uint8_t global = parseVariable("Expect variable name.");
 
@@ -460,15 +480,15 @@ ParseRule rules[] = {
   [TokIdent]        = {variable, NULL,   PrecLiteral},
   [TokString]       = {string,   NULL,   PrecLiteral},
   [TokNumber]       = {number,   NULL,   PrecNone},
-  [TokAnd]          = {NULL,     NULL,   PrecNone},
+  [TokAnd]          = {NULL,     and_,   PrecAnd},
   [TokClass]        = {NULL,     NULL,   PrecNone},
   [TokElse]         = {NULL,     NULL,   PrecNone},
   [TokFalse]        = {literal,  NULL,   PrecNone},
   [TokFn]           = {NULL,     NULL,   PrecNone},
   [TokIf]           = {ifStmt,   NULL,   PrecStatement},
   [TokNil]          = {literal,  NULL,   PrecNone},
-  [TokOr]           = {NULL,     NULL,   PrecNone},
-  [TokPrint]        = {print,    NULL,  PrecStatement},
+  [TokOr]           = {NULL,     or_,    PrecOr},
+  [TokPrint]        = {print,    NULL,   PrecStatement},
   [TokReturn]       = {NULL,     NULL,   PrecNone},
   [TokSuper]        = {NULL,     NULL,   PrecNone},
   [TokSelf]         = {NULL,     NULL,   PrecNone},
